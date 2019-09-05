@@ -1,6 +1,7 @@
 /* eslint-disable no-prototype-builtins */
 
-const shortid = require('shortid');
+const format = require('pg-format');
+const db = require('../db');
 const { readJsonFromDb, writeJsonToDb } = require('../utils/db.utils');
 const ErrorWithHttpStatus = require('../utils/ErrorWithHttpStatus');
 
@@ -25,23 +26,11 @@ exports.insert = async ({ author, code, title, description, language }) => {
   try {
     if (!author || !code || !title || !description || !language)
       throw new ErrorWithHttpStatus('Invalid snip properties', 400);
-    // Read snippets.json
-    const snippets = await readJsonFromDb('snippets');
-    // Grab (validated) data from new snippet
-    // Push new snippet into snippets
-    snippets.push({
-      id: shortid.generate(),
-      author,
-      code,
-      title,
-      description,
-      language,
-      comments: [],
-      favorites: 0,
-    });
-    // Write to file
-    await writeJsonToDb('snippets', JSON.stringify(snippets));
-    return snippets[snippets.length - 1];
+    await db.query(
+      `INSERT INTO snippet (code, title, description, author, language)
+      VALUES ($1, $2, $3, $4, $5)`,
+      [code, author, title, description, language]
+    );
   } catch (err) {
     if (err instanceof ErrorWithHttpStatus) throw err;
     else throw new ErrorWithHttpStatus('Database error');
@@ -54,16 +43,34 @@ exports.insert = async ({ author, code, title, description, language }) => {
  * @param {Object} [query]
  * @returns {Promise<Snippet[]>} Array of snippet objects
  */
-exports.select = async (query = {}) => {
+exports.select = async query => {
   try {
-    // Read & parse file
-    const snippets = await readJsonFromDb('snippets');
-    // Filter snippets with query
-    const filtered = snippets.filter(snippet =>
-      Object.keys(query).every(key => query[key] === snippet[key])
+    const whereClause = Object.keys(query)
+      .map((_, i) => `%I = $${i + 1}`)
+      .join(' AND ');
+    const sql = format(
+      `SELECT * FROM snippet ${
+        whereClause.length ? `WHERE ${whereClause}` : ''
+      } ORDER BY id`,
+      ...Object.keys(query)
     );
-    // Return data
-    return filtered;
+    const result = await db.query(sql, Object.values(query));
+    return result.rows;
+    // const keys = Object.keys(query);
+    // if (keys.length > 0) {
+    //   const vals = Object.values(query);
+    //   const params = [];
+    //   const queries = [];
+    //   for (let i = 1; i <= keys.length; i++) {
+    //     params.push(`${keys[i - 1]} = $${i}`);
+    //     queries.push(`${vals[i - 1]}`);
+    //   }
+    //   const queryText = `SELECT * FROM snippet WHERE ${params.join(' AND ')}`;
+    //   const queryResult = await db.query(queryText, params);
+    //   return queryResult.rows;
+    // }
+    // const noQueryResult = await db.query('SELECT * FROM snippet');
+    // return noQueryResult.rows;
   } catch (err) {
     throw new ErrorWithHttpStatus('Database error');
   }
@@ -75,28 +82,12 @@ exports.select = async (query = {}) => {
  */
 exports.update = async ({ id }, newData) => {
   try {
-    let updatedSnip = {};
-    let idFound = false;
-    // Read in file
-    const snippets = await readJsonFromDb('snippets');
-    // Find snippet with id
-    // Update snippet with (validated) newData
-    const updated = snippets.map(snippet => {
-      if (snippet.id !== id) return snippet;
-      Object.keys(newData).forEach(key => {
-        if (key in snippet) snippet[key] = newData[key];
-        else throw new ErrorWithHttpStatus(`Key "${key}" does not exist`, 400);
-      });
-      updatedSnip = snippet;
-      idFound = true;
-      return snippet;
+    Object.keys(newData).forEach(key => {
+      db.query(`UPDATE snippet SET ${key} = $1 WHERE id = $2`, [
+        newData[key],
+        id,
+      ]);
     });
-    if (!idFound) {
-      throw new ErrorWithHttpStatus('ID does not exist', 404);
-    }
-    // Overwrite existing data
-    await writeJsonToDb('snippets', JSON.stringify(updated));
-    return updatedSnip;
   } catch (err) {
     if (err instanceof ErrorWithHttpStatus) throw err;
     else throw new ErrorWithHttpStatus('Database error');
@@ -109,14 +100,10 @@ exports.update = async ({ id }, newData) => {
  */
 exports.delete = async ({ id }) => {
   try {
-    // Read in database
-    const snippets = await readJsonFromDb('snippets');
-    // Filter results
-    const filtered = snippets.filter(snippet => snippet.id !== id);
-    // Write file
-    if (filtered.length === snippets.length)
+    const result = await db.query(`DELETE FROM snippet WHERE id = $1`, [id]);
+    if (result.rowCount === 0) {
       throw new ErrorWithHttpStatus('ID does not exist', 404);
-    return writeJsonToDb('snippets', JSON.stringify(filtered));
+    }
   } catch (err) {
     if (err instanceof ErrorWithHttpStatus) throw err;
     else throw new ErrorWithHttpStatus('Database error');
