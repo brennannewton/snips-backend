@@ -1,6 +1,7 @@
 const express = require('express');
-const Snippet = require('../models/Snippet.model');
 const snippets = require('../controllers/snippets.controller');
+const authors = require('../controllers/authors.controller');
+const validate = require('./validate');
 
 const router = express.Router();
 
@@ -14,11 +15,14 @@ router.get('/api', (request, response) => {
 });
 
 /* Snippet routes */
-
-router.post('/api/snippets', snippets.createSnippet);
+router.post('/api/snippets', validate, snippets.createSnippet);
 router.get('/api/snippets', snippets.getAllSnippets);
 router.get('/api/snippets/:id', snippets.getSnippetById);
-router.patch('/api/snippets/:id', snippets.updateSnipById);
-router.delete('/api/snippets/:id', snippets.deleteSnipById);
+router.patch('/api/snippets/:id', validate, snippets.updateSnipById);
+router.delete('/api/snippets/:id', validate, snippets.deleteSnipById);
+
+/* Author routes */
+router.post('/api/signup', authors.signup);
+router.get('/api/login', authors.login);
 
 module.exports = router;

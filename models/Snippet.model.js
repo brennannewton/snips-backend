@@ -2,7 +2,6 @@
 
 const format = require('pg-format');
 const db = require('../db');
-const { readJsonFromDb, writeJsonToDb } = require('../utils/db.utils');
 const ErrorWithHttpStatus = require('../utils/ErrorWithHttpStatus');
 
 /**
@@ -26,11 +25,12 @@ exports.insert = async ({ author, code, title, description, language }) => {
   try {
     if (!author || !code || !title || !description || !language)
       throw new ErrorWithHttpStatus('Invalid snip properties', 400);
-    await db.query(
+    const result = await db.query(
       `INSERT INTO snippet (code, title, description, author, language)
-      VALUES ($1, $2, $3, $4, $5)`,
-      [code, author, title, description, language]
+      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [code, title, description, author, language]
     );
+    return result.rows[0];
   } catch (err) {
     if (err instanceof ErrorWithHttpStatus) throw err;
     else throw new ErrorWithHttpStatus('Database error');
