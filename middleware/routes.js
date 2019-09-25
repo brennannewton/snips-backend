@@ -23,6 +23,6 @@ router.delete('/api/snippets/:id', validate, snippets.deleteSnipById);
 
 /* Author routes */
 router.post('/api/signup', authors.signup);
-router.get('/api/login', authors.login);
+router.post('/api/login', authors.login);
 
 module.exports = router;
